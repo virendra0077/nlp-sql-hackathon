@@ -3,16 +3,16 @@ from psycopg2 import pool
 import os
 from contextlib import contextmanager
 
+from dotenv import load_dotenv
+load_dotenv()
 
-# Configuration — prefer env vars over hard-coded values
 DB_CONFIG = {
     "host":     os.getenv("DB_HOST", "localhost"),
     "database": os.getenv("DB_NAME", "test1"),
     "user":     os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "Virendra@26"),   
+    "password": os.getenv("DB_PASSWORD", ""),
 }
 
-# A single connection pool shared across the process (min 1, max 5 connections)
 _pool: pool.SimpleConnectionPool | None = None
 
 

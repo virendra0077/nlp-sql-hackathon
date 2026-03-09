@@ -1,8 +1,8 @@
 """
-explorer.py  –  Dynamic table explorer API  (v2 — fixed)
+explorer_v2.py  –  Dynamic table explorer API  (v2 — fixed)
 
 Add to app.py:
-    from explorer import router as explorer_router
+    from explorer_v2 import router as explorer_router
     app.include_router(explorer_router)
 
 Fixes vs v1:
@@ -66,19 +66,6 @@ def _scalar(sql: str, params: list = None):
 
 
 # ── Table config ──────────────────────────────────────────────────────────────
-#
-# Keys per table:
-#   select       – column names on the primary table (may include casts like "Col::numeric AS Col")
-#   joins        – JOIN clause string
-#   extra_select – raw SQL appended after base SELECT (for joined cols, e.g. ", ra.AssetName")
-#   display_cols – final column names as returned by the query (drives UI headers + sort)
-#   sort_map     – {display_col: "qualified.SQL.expr"} for ORDER BY (needed for JOIN aliases)
-#   searchable   – list of qualified SQL expressions for ILIKE search
-#   filterable   – {display_col: "SELECT DISTINCT …"} to populate dropdown options
-#   where_map    – {display_col: "qualified.SQL.expr"} for WHERE = %s
-#   date_cols    – first entry used for date-range filter
-#   amount_cols  – first entry used for amount-range filter
-#   sum_cols     – columns to SUM in the stats bar
 
 TABLE_CONFIG = {
 
@@ -121,14 +108,13 @@ TABLE_CONFIG = {
     },
 
     "REUnitSales": {
-        # Cast money cols to numeric so Python receives Decimal, not a '$' string
-        "select":       ["REUnitSalesID", "RESalesID", "PriceHeader",
+        "select":       ["REUnitSalesID", "ReSalesID", "PriceHeader",
                          "Amount",
                          "Demand::numeric AS Demand",
                          "Collections::numeric AS Collections"],
         "joins":        "",
         "extra_select": "",
-        "display_cols": ["REUnitSalesID","RESalesID","PriceHeader",
+        "display_cols": ["REUnitSalesID","ReSalesID","PriceHeader",
                          "Amount","Demand","Collections"],
         "sort_map":     {"REUnitSalesID":"REUnitSales.REUnitSalesID",
                          "Amount":"REUnitSales.Amount"},
@@ -276,8 +262,8 @@ def get_table_data(
     search:       str             = Query(""),
     date_from:    str             = Query(""),
     date_to:      str             = Query(""),
-    amount_min:   Optional[str] = Query(None),
-    amount_max:   Optional[str] = Query(None),
+    amount_min:   Optional[str]   = Query(None),
+    amount_max:   Optional[str]   = Query(None),
     filter_ZoneName:                  str = Query(""),
     filter_AssetName:                 str = Query(""),
     filter_Scheme:                    str = Query(""),
@@ -291,7 +277,6 @@ def get_table_data(
 
     cfg = TABLE_CONFIG[table]
 
-    # Safely parse amount strings — empty string or None both become None
     def _to_float(s):
         try: return float(s) if s else None
         except (TypeError, ValueError): return None
@@ -314,7 +299,6 @@ def get_table_data(
     where, params = _build_where(cfg, active, search, date_from, date_to,
                                   amt_min, amt_max)
 
-    # Build SELECT list — entries with "::" or "AS" are raw SQL, others get table prefix
     def _sel(c):
         return c if ("::" in c or " AS " in c or "." in c) else f"{table}.{c}"
 
@@ -323,7 +307,6 @@ def get_table_data(
     joins  = cfg.get("joins", "")
     offset = (page - 1) * page_size
 
-    # Sort — resolve alias through sort_map, then fall back to bare column name
     order = ""
     if sort_col and sort_col in cfg["display_cols"]:
         sort_expr = cfg.get("sort_map", {}).get(sort_col, sort_col)
@@ -362,5 +345,4 @@ def get_table_data(
         }
 
     except Exception as e:
-        # Always return a plain string — never let psycopg2/Python objects leak to browser
         raise HTTPException(500, detail=f"{type(e).__name__}: {e}")
