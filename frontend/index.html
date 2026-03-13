@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>RE Insight — Real Estate Intelligence</title>
+<title>RE Insight — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -18,9 +18,6 @@
     --text:       #f0f0f0;
     --text-muted: #6b6b7a;
     --text-dim:   #9898a8;
-    --user-bg:    #1a1a20;
-    --agent-bg:   #111113;
-    --sql-bg:     #0d0d10;
     --error:      #ff4757;
     --success:    #2ed573;
     --font-head:  'Syne', sans-serif;
@@ -40,13 +37,36 @@
     overflow: hidden;
   }
 
-  /* ── Layout ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.35;
+    pointer-events: none;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, var(--bg) 100%);
+    pointer-events: none;
+  }
+
   .app {
     display: grid;
     grid-template-columns: 260px 1fr;
-    grid-template-rows: 100vh;
     height: 100vh;
+    position: relative;
+    z-index: 1;
+    animation: fadeIn 0.3s ease forwards;
   }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
   /* ── Sidebar ── */
   .sidebar {
@@ -62,35 +82,31 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .logo {
+  .sidebar-logo {
     display: flex;
     align-items: center;
     gap: 10px;
     margin-bottom: 4px;
   }
 
-  .logo-icon {
-    width: 32px;
-    height: 32px;
+  .sidebar-logo-icon {
+    width: 32px; height: 32px;
     background: var(--accent);
     border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
 
-  .logo-icon svg { width: 18px; height: 18px; }
+  .sidebar-logo-icon svg { width: 18px; height: 18px; }
 
-  .logo-name {
+  .sidebar-logo-name {
     font-family: var(--font-head);
     font-weight: 800;
     font-size: 18px;
-    color: var(--text);
     letter-spacing: -0.5px;
   }
 
-  .logo-sub {
+  .sidebar-logo-sub {
     font-size: 11px;
     color: var(--text-muted);
     letter-spacing: 0.08em;
@@ -99,9 +115,7 @@
     margin-top: -2px;
   }
 
-  .sidebar-section {
-    padding: 16px 14px 8px;
-  }
+  .sidebar-section { padding: 16px 14px 8px; }
 
   .sidebar-label {
     font-size: 10px;
@@ -135,38 +149,101 @@
     color: var(--text);
   }
 
-  .sample-btn .sample-icon {
-    display: inline-block;
-    margin-right: 6px;
-    opacity: 0.5;
-    font-style: normal;
+  .sample-btn .sample-icon { display: inline-block; margin-right: 6px; opacity: 0.5; font-style: normal; }
+
+  .admin-section {
+    padding: 12px 14px 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
   }
+
+  .admin-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: 0 6px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .admin-label::before {
+    content: '';
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  .table-link-btn {
+    width: 100%;
+    background: rgba(232,255,71,0.07);
+    border: 1px solid rgba(232,255,71,0.2);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    text-align: left;
+    color: var(--accent);
+    font-family: var(--font-body);
+    font-size: 12.5px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+  }
+
+  .table-link-btn:hover {
+    background: rgba(232,255,71,0.14);
+    border-color: rgba(232,255,71,0.4);
+    transform: translateX(2px);
+  }
+
+  .table-link-btn svg { width: 13px; height: 13px; flex-shrink: 0; opacity: 0.7; }
 
   .sidebar-footer {
     margin-top: auto;
-    padding: 16px 20px;
+    padding: 14px 20px;
     border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
-  .status-dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    background: var(--success);
-    border-radius: 50%;
-    margin-right: 7px;
-    animation: pulse 2s infinite;
+  .footer-user { display: flex; align-items: center; gap: 9px; }
+
+  .user-avatar {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-head);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
   }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
+  .user-info-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .user-info-role { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 
-  .status-text {
-    font-size: 12px;
+  .logout-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 5px 10px;
     color: var(--text-muted);
+    font-family: var(--font-body);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
   }
+
+  .logout-btn:hover { border-color: var(--error); color: var(--error); }
 
   /* ── Main ── */
   .main {
@@ -176,7 +253,6 @@
     background: var(--bg);
   }
 
-  /* ── Top bar ── */
   .topbar {
     padding: 18px 28px;
     border-bottom: 1px solid var(--border);
@@ -184,20 +260,10 @@
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
-    background: var(--bg);
   }
 
-  .topbar-title {
-    font-family: var(--font-head);
-    font-weight: 700;
-    font-size: 15px;
-    color: var(--text);
-  }
-
-  .topbar-meta {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
+  .topbar-title { font-family: var(--font-head); font-weight: 700; font-size: 15px; }
+  .topbar-meta { font-size: 12px; color: var(--text-muted); }
 
   .clear-btn {
     background: transparent;
@@ -211,12 +277,8 @@
     transition: all 0.15s;
   }
 
-  .clear-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
+  .clear-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-  /* ── Chat area ── */
   .chat-area {
     flex: 1;
     overflow-y: auto;
@@ -225,10 +287,8 @@
   }
 
   .chat-area::-webkit-scrollbar { width: 4px; }
-  .chat-area::-webkit-scrollbar-track { background: transparent; }
   .chat-area::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-  /* ── Empty state ── */
   .empty-state {
     display: flex;
     flex-direction: column;
@@ -236,40 +296,21 @@
     justify-content: center;
     height: 100%;
     gap: 12px;
-    opacity: 0;
-    animation: fadeIn 0.5s 0.2s forwards;
+    animation: fadeIn 0.5s 0.2s both;
   }
 
   .empty-icon {
-    width: 56px;
-    height: 56px;
+    width: 56px; height: 56px;
     background: var(--surface);
     border: 1px solid var(--border2);
     border-radius: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 4px;
+    display: flex; align-items: center; justify-content: center;
   }
 
   .empty-icon svg { width: 26px; height: 26px; opacity: 0.4; }
+  .empty-title { font-family: var(--font-head); font-size: 20px; font-weight: 700; }
+  .empty-sub { font-size: 14px; color: var(--text-muted); text-align: center; max-width: 340px; line-height: 1.6; }
 
-  .empty-title {
-    font-family: var(--font-head);
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text);
-  }
-
-  .empty-sub {
-    font-size: 14px;
-    color: var(--text-muted);
-    text-align: center;
-    max-width: 340px;
-    line-height: 1.6;
-  }
-
-  /* ── Message ── */
   .message-row {
     padding: 6px 28px;
     opacity: 0;
@@ -280,13 +321,7 @@
     width: 100%;
   }
 
-  @keyframes slideIn {
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes fadeIn {
-    to { opacity: 1; }
-  }
+  @keyframes slideIn { to { opacity: 1; transform: translateY(0); } }
 
   .message-row.user-row { padding-top: 12px; }
 
@@ -298,14 +333,10 @@
   }
 
   .avatar {
-    width: 24px;
-    height: 24px;
+    width: 24px; height: 24px;
     border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
     flex-shrink: 0;
     font-family: var(--font-head);
   }
@@ -313,19 +344,8 @@
   .avatar.user { background: var(--accent); color: #000; }
   .avatar.agent { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border2); }
 
-  .message-sender {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-muted);
-    letter-spacing: 0.02em;
-  }
-
-  .message-time {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-left: auto;
-    opacity: 0.6;
-  }
+  .message-sender { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .message-time { font-size: 11px; color: var(--text-muted); margin-left: auto; opacity: 0.6; }
 
   .message-bubble {
     margin-left: 32px;
@@ -336,22 +356,10 @@
     border: 1px solid transparent;
   }
 
-  .user-row .message-bubble {
-    background: var(--user-bg);
-    border-color: var(--border);
-    color: var(--text);
-  }
+  .user-row .message-bubble { background: #1a1a20; border-color: var(--border); }
+  .agent-row .message-bubble { background: transparent; padding: 0; border: none; }
 
-  .agent-row .message-bubble {
-    background: transparent;
-    padding: 0;
-    border: none;
-  }
-
-  /* ── Result card ── */
-  .result-card {
-    margin-left: 32px;
-  }
+  .result-card { margin-left: 32px; }
 
   .result-answer {
     background: var(--surface);
@@ -361,271 +369,75 @@
     margin-bottom: 10px;
   }
 
-  .result-label {
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 8px;
-  }
+  .result-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+  .result-value { font-family: var(--font-head); font-size: 28px; font-weight: 800; color: var(--accent); letter-spacing: -1px; line-height: 1; }
+  .result-value.text-result { font-size: 15px; font-weight: 400; font-family: var(--font-body); color: var(--text); letter-spacing: 0; line-height: 1.6; }
 
-  .result-value {
-    font-family: var(--font-head);
-    font-size: 28px;
-    font-weight: 800;
-    color: var(--accent);
-    letter-spacing: -1px;
-    line-height: 1;
-  }
-
-  .result-value.text-result {
-    font-size: 15px;
-    font-weight: 400;
-    font-family: var(--font-body);
-    color: var(--text);
-    letter-spacing: 0;
-    line-height: 1.6;
-  }
-
-  .result-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-    margin-top: 4px;
-  }
-
-  .result-table td {
-    padding: 7px 0;
-    border-bottom: 1px solid var(--border);
-    color: var(--text);
-  }
-
+  .result-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+  .result-table td { padding: 7px 0; border-bottom: 1px solid var(--border); color: var(--text); }
   .result-table tr:last-child td { border-bottom: none; }
 
-  /* ── SQL toggle ── */
-  .sql-toggle {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 0;
-    font-family: var(--font-body);
-    transition: color 0.15s;
-  }
-
+  .sql-toggle { background: transparent; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 4px 0; font-family: var(--font-body); transition: color 0.15s; }
   .sql-toggle:hover { color: var(--text); }
-
-  .sql-toggle svg {
-    width: 14px;
-    height: 14px;
-    transition: transform 0.2s;
-  }
-
+  .sql-toggle svg { width: 14px; height: 14px; transition: transform 0.2s; }
   .sql-toggle.open svg { transform: rotate(90deg); }
 
-  .sql-block {
-    background: var(--sql-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 14px 16px;
-    margin-top: 8px;
-    overflow-x: auto;
-    display: none;
-  }
-
+  .sql-block { background: #0d0d10; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 8px; overflow-x: auto; display: none; }
   .sql-block.visible { display: block; }
+  .sql-block pre { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
 
-  .sql-block pre {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-dim);
-    line-height: 1.7;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
+  .kw { color: #c792ea; } .fn { color: #82aaff; } .str { color: #c3e88d; } .num { color: #f78c6c; }
 
-  /* SQL syntax highlight */
-  .kw { color: #c792ea; }
-  .fn { color: #82aaff; }
-  .str { color: #c3e88d; }
-  .num { color: #f78c6c; }
-  .cmt { color: #546e7a; font-style: italic; }
+  .duration-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--text-muted); margin-left: 8px; font-family: var(--font-mono); }
 
-  /* ── Duration badge ── */
-  .duration-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 3px 10px;
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-left: 8px;
-    font-family: var(--font-mono);
-  }
+  .error-card { margin-left: 32px; background: #1a0a0a; border: 1px solid #3a1010; border-radius: var(--radius); padding: 14px 16px; font-size: 13px; color: var(--error); font-family: var(--font-mono); line-height: 1.6; }
 
-  /* ── Error ── */
-  .error-card {
-    margin-left: 32px;
-    background: #1a0a0a;
-    border: 1px solid #3a1010;
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    font-size: 13px;
-    color: var(--error);
-    font-family: var(--font-mono);
-    line-height: 1.6;
-  }
-
-  /* ── Thinking ── */
-  .thinking-row {
-    padding: 6px 28px;
-    max-width: 860px;
-    margin: 0 auto;
-    width: 100%;
-  }
-
-  .thinking {
-    margin-left: 32px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--text-muted);
-    font-size: 13px;
-  }
-
-  .thinking-dots {
-    display: flex;
-    gap: 4px;
-  }
-
-  .thinking-dots span {
-    width: 6px;
-    height: 6px;
-    background: var(--accent);
-    border-radius: 50%;
-    animation: blink 1.2s infinite;
-    opacity: 0.3;
-  }
-
+  .thinking-row { padding: 6px 28px; max-width: 860px; margin: 0 auto; width: 100%; }
+  .thinking { margin-left: 32px; display: flex; align-items: center; gap: 10px; color: var(--text-muted); font-size: 13px; }
+  .thinking-dots { display: flex; gap: 4px; }
+  .thinking-dots span { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: blink 1.2s infinite; opacity: 0.3; }
   .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
   .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%,100%{opacity:0.3} 50%{opacity:1} }
 
-  @keyframes blink {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 1; }
-  }
+  .input-wrapper-outer { border-top: 1px solid var(--border); background: var(--bg); padding: 16px 0 20px; flex-shrink: 0; }
+  .input-area { padding: 0 28px; max-width: 860px; margin: 0 auto; width: 100%; }
 
-  /* ── Input area ── */
-  .input-area {
-    padding: 16px 28px 20px;
-    border-top: 1px solid var(--border);
-    background: var(--bg);
-    flex-shrink: 0;
-    max-width: 860px;
-    margin: 0 auto;
-    width: 100%;
-    box-sizing: border-box;
-  }
+  .input-box { display: flex; align-items: flex-end; gap: 10px; background: var(--surface); border: 1px solid var(--border2); border-radius: 14px; padding: 12px 14px 12px 18px; transition: border-color 0.2s; }
+  .input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(232,255,71,0.1); }
 
-  /* Override for full-width positioning */
-  .input-wrapper-outer {
-    border-top: 1px solid var(--border);
-    background: var(--bg);
-    padding: 16px 0 20px;
-    flex-shrink: 0;
-  }
-
-  .input-box {
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 14px;
-    padding: 12px 14px 12px 18px;
-    transition: border-color 0.2s;
-  }
-
-  .input-box:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent)22;
-  }
-
-  .input-box textarea {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--text);
-    font-family: var(--font-body);
-    font-size: 14px;
-    line-height: 1.5;
-    resize: none;
-    min-height: 22px;
-    max-height: 120px;
-    overflow-y: auto;
-  }
-
+  .input-box textarea { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-family: var(--font-body); font-size: 14px; line-height: 1.5; resize: none; min-height: 22px; max-height: 120px; overflow-y: auto; }
   .input-box textarea::placeholder { color: var(--text-muted); }
 
-  .send-btn {
-    width: 36px;
-    height: 36px;
-    background: var(--accent);
-    border: none;
-    border-radius: 9px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: all 0.15s;
-  }
-
+  .send-btn { width: 36px; height: 36px; background: var(--accent); border: none; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
   .send-btn:hover { background: var(--accent-dim); transform: scale(1.05); }
   .send-btn:active { transform: scale(0.97); }
   .send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
   .send-btn svg { width: 16px; height: 16px; }
 
-  .input-hint {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 8px;
-    padding: 0 4px;
-  }
+  .input-hint { font-size: 11px; color: var(--text-muted); margin-top: 8px; padding: 0 4px; }
 
-  /* ── Responsive ── */
-  @media (max-width: 700px) {
-    .app { grid-template-columns: 1fr; }
-    .sidebar { display: none; }
-  }
+  @media (max-width: 700px) { .app { grid-template-columns: 1fr; } .sidebar { display: none; } }
 </style>
 </head>
 <body>
 
 <div class="app">
 
-  <!-- ── Sidebar ── -->
+  <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="logo">
-        <div class="logo-icon">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round">
             <rect x="3" y="10" width="18" height="11" rx="2"/>
             <path d="M7 10V7a5 5 0 0 1 10 0v3"/>
             <circle cx="12" cy="16" r="1.5" fill="#000" stroke="none"/>
           </svg>
         </div>
-        <span class="logo-name">RE Insight</span>
+        <span class="sidebar-logo-name">RE Insight</span>
       </div>
-      <div class="logo-sub">Real Estate Intelligence</div>
+      <div class="sidebar-logo-sub">Real Estate Intelligence</div>
     </div>
 
     <div class="sidebar-section">
@@ -650,15 +462,34 @@
       </button>
     </div>
 
+    <!-- Admin-only section -->
+    <div class="admin-section" id="admin-section" style="display:none;">
+      <div class="admin-label">Admin · Data Tables</div>
+      <a class="table-link-btn" href="dataexplorer.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="3" y1="9" x2="21" y2="9"/>
+          <line x1="3" y1="15" x2="21" y2="15"/>
+          <line x1="9" y1="3" x2="9" y2="21"/>
+        </svg>
+        View table
+      </a>
+    </div>
+
     <div class="sidebar-footer">
-      <span class="status-dot"></span>
-      <span class="status-text" id="status-text">Connected to database</span>
+      <div class="footer-user">
+        <div class="user-avatar" id="user-avatar">A</div>
+        <div>
+          <div class="user-info-name" id="user-display-name">Admin</div>
+          <div class="user-info-role" id="user-display-role">Administrator</div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">Log out</button>
     </div>
   </aside>
 
-  <!-- ── Main ── -->
+  <!-- Main -->
   <main class="main">
-
     <div class="topbar">
       <div>
         <div class="topbar-title">SQL Agent Chat</div>
@@ -699,17 +530,43 @@
         <div class="input-hint">Press <kbd style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:1px 5px;font-family:var(--font-mono);font-size:10px;">Enter</kbd> to send &nbsp;·&nbsp; <kbd style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:1px 5px;font-family:var(--font-mono);font-size:10px;">Shift+Enter</kbd> for new line</div>
       </div>
     </div>
-
   </main>
 </div>
 
 <script>
-  // ── Config ──
+  // ── Auth guard: redirect to login if no session ──
+  const sessionRaw = sessionStorage.getItem('re_user');
+  if (!sessionRaw) {
+    window.location.replace('login.html');
+  }
+
+  let currentUser = null;
+  try {
+    currentUser = JSON.parse(sessionRaw);
+  } catch(e) {
+    window.location.replace('login.html');
+  }
+
+  // Populate user info
+  if (currentUser) {
+    document.getElementById('user-avatar').textContent = currentUser.username[0].toUpperCase();
+    document.getElementById('user-display-name').textContent = currentUser.displayName;
+    document.getElementById('user-display-role').textContent = currentUser.roleLabel;
+    if (currentUser.role === 'admin') {
+      document.getElementById('admin-section').style.display = 'block';
+    }
+  }
+
+  function doLogout() {
+    sessionStorage.removeItem('re_user');
+    window.location.href = 'login.html';
+  }
+
+  // ── Chat ──
   const API_URL = 'http://localhost:8000';
   let messageCount = 0;
   let isLoading = false;
 
-  // ── Helpers ──
   function getTime() {
     return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   }
@@ -720,10 +577,7 @@
   }
 
   function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendQuestion();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendQuestion(); }
   }
 
   function fillQuestion(btn) {
@@ -746,20 +600,7 @@
 
   function updateMsgCount() {
     const el = document.getElementById('msg-count');
-    el.textContent = messageCount === 0
-      ? 'No messages yet'
-      : `${messageCount} message${messageCount !== 1 ? 's' : ''}`;
-  }
-
-  function highlightSQL(sql) {
-    const keywords = /\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|ON|AND|OR|IN|NOT|AS|GROUP BY|ORDER BY|HAVING|LIMIT|INSERT|UPDATE|DELETE|WITH|UNION|CASE|WHEN|THEN|ELSE|END|BY|DISTINCT|COUNT|SUM|AVG|MIN|MAX|COALESCE|CAST|NULL|IS|LIKE|ILIKE|TRUE|FALSE)\b/gi;
-    const strings = /'([^']*)'/g;
-    const nums = /\b(\d+\.?\d*)\b/g;
-
-    return sql
-      .replace(strings, '<span class="str">\'$1\'</span>')
-      .replace(keywords, '<span class="kw">$&</span>')
-      .replace(nums, '<span class="num">$&</span>');
+    el.textContent = messageCount === 0 ? 'No messages yet' : `${messageCount} message${messageCount !== 1 ? 's' : ''}`;
   }
 
   function scrollToBottom() {
@@ -767,22 +608,33 @@
     area.scrollTop = area.scrollHeight;
   }
 
-  // ── Render messages ──
-  function appendUserMessage(question) {
-    const emptyState = document.getElementById('empty-state');
-    if (emptyState) emptyState.style.display = 'none';
+  function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
 
+  function highlightSQL(sql) {
+    const keywords = /\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|ON|AND|OR|IN|NOT|AS|GROUP BY|ORDER BY|HAVING|LIMIT|INSERT|UPDATE|DELETE|WITH|UNION|CASE|WHEN|THEN|ELSE|END|BY|DISTINCT|COUNT|SUM|AVG|MIN|MAX|COALESCE|CAST|NULL|IS|LIKE|ILIKE|TRUE|FALSE)\b/gi;
+    const strings = /'([^']*)'/g;
+    const nums = /\b(\d+\.?\d*)\b/g;
+    return sql
+      .replace(strings, '<span class="str">\'$1\'</span>')
+      .replace(keywords, '<span class="kw">$&</span>')
+      .replace(nums, '<span class="num">$&</span>');
+  }
+
+  function appendUserMessage(question) {
+    document.getElementById('empty-state').style.display = 'none';
     const chatArea = document.getElementById('chat-area');
     const row = document.createElement('div');
     row.className = 'message-row user-row';
+    const initials = currentUser ? currentUser.username[0].toUpperCase() : 'Y';
     row.innerHTML = `
       <div class="message-header">
-        <div class="avatar user">Y</div>
-        <span class="message-sender">You</span>
+        <div class="avatar user">${initials}</div>
+        <span class="message-sender">${escapeHtml(currentUser?.displayName || 'You')}</span>
         <span class="message-time">${getTime()}</span>
       </div>
-      <div class="message-bubble">${escapeHtml(question)}</div>
-    `;
+      <div class="message-bubble">${escapeHtml(question)}</div>`;
     chatArea.appendChild(row);
     scrollToBottom();
   }
@@ -794,16 +646,13 @@
     row.id = 'thinking-row';
     row.innerHTML = `
       <div class="message-header" style="padding:0 0 0 32px;margin-bottom:0">
-        <div class="avatar agent" style="width:24px;height:24px">AI</div>
+        <div class="avatar agent">AI</div>
         <span class="message-sender" style="margin-left:8px">RE Insight</span>
       </div>
       <div class="thinking">
-        <div class="thinking-dots">
-          <span></span><span></span><span></span>
-        </div>
+        <div class="thinking-dots"><span></span><span></span><span></span></div>
         <span id="thinking-label">Generating SQL…</span>
-      </div>
-    `;
+      </div>`;
     chatArea.appendChild(row);
     scrollToBottom();
     return row;
@@ -818,10 +667,8 @@
     const chatArea = document.getElementById('chat-area');
     const row = document.createElement('div');
     row.className = 'message-row agent-row';
-
     const isNumeric = /^[₹\d\s,.Cr]+$/.test(data.formatted_result.trim());
     const isMultiRow = data.result.length > 1;
-
     let resultHTML = '';
     if (isMultiRow) {
       const rows = data.formatted_result.split('\n').map(r => {
@@ -830,19 +677,14 @@
       }).join('');
       resultHTML = `<table class="result-table">${rows}</table>`;
     } else {
-      const cls = isNumeric ? '' : 'text-result';
-      resultHTML = `<div class="result-value ${cls}">${escapeHtml(data.formatted_result)}</div>`;
+      resultHTML = `<div class="result-value ${isNumeric ? '' : 'text-result'}">${escapeHtml(data.formatted_result)}</div>`;
     }
-
     const sqlId = 'sql-' + Date.now();
     row.innerHTML = `
       <div class="message-header">
         <div class="avatar agent">AI</div>
         <span class="message-sender">RE Insight</span>
-        <span class="message-time">
-          ${getTime()}
-          <span class="duration-badge">⚡ ${data.duration_ms}ms</span>
-        </span>
+        <span class="message-time">${getTime()}<span class="duration-badge">⚡ ${data.duration_ms}ms</span></span>
       </div>
       <div class="result-card">
         <div class="result-answer">
@@ -850,16 +692,11 @@
           ${resultHTML}
         </div>
         <button class="sql-toggle" onclick="toggleSQL('${sqlId}', this)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           View generated SQL
         </button>
-        <div class="sql-block" id="${sqlId}">
-          <pre>${highlightSQL(escapeHtml(data.sql))}</pre>
-        </div>
-      </div>
-    `;
+        <div class="sql-block" id="${sqlId}"><pre>${highlightSQL(escapeHtml(data.sql))}</pre></div>
+      </div>`;
     chatArea.appendChild(row);
     scrollToBottom();
   }
@@ -874,8 +711,7 @@
         <span class="message-sender">RE Insight</span>
         <span class="message-time">${getTime()}</span>
       </div>
-      <div class="error-card">⚠ ${escapeHtml(message)}</div>
-    `;
+      <div class="error-card">⚠ ${escapeHtml(message)}</div>`;
     chatArea.appendChild(row);
     scrollToBottom();
   }
@@ -884,42 +720,25 @@
     const block = document.getElementById(id);
     block.classList.toggle('visible');
     btn.classList.toggle('open');
-    btn.querySelector('span') && (btn.querySelector('span').textContent =
-      block.classList.contains('visible') ? 'Hide SQL' : 'View generated SQL');
-    // Update text node
     const textNodes = [...btn.childNodes].filter(n => n.nodeType === 3);
     if (textNodes.length) {
-      textNodes[textNodes.length - 1].textContent = block.classList.contains('visible')
-        ? ' Hide SQL' : ' View generated SQL';
+      textNodes[textNodes.length - 1].textContent = block.classList.contains('visible') ? ' Hide SQL' : ' View generated SQL';
     }
   }
 
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  // ── Send ──
   async function sendQuestion() {
     if (isLoading) return;
     const input = document.getElementById('question-input');
     const question = input.value.trim();
     if (!question) return;
-
     isLoading = true;
     document.getElementById('send-btn').disabled = true;
     input.value = '';
     input.style.height = 'auto';
-
     messageCount++;
     updateMsgCount();
     appendUserMessage(question);
-    const thinkingRow = appendThinking();
-
-    // Cycle thinking labels
+    appendThinking();
     const labels = ['Generating SQL…', 'Running query…', 'Formatting result…'];
     let li = 0;
     const labelInterval = setInterval(() => {
@@ -927,62 +746,34 @@
       const el = document.getElementById('thinking-label');
       if (el) el.textContent = labels[li];
     }, 1200);
-
     try {
       const resp = await fetch(`${API_URL}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question }),
       });
-
       clearInterval(labelInterval);
       removeThinking();
-
       if (!resp.ok) {
         const err = await resp.json();
         appendErrorResult(err.detail || 'Unknown error from server.');
       } else {
         const data = await resp.json();
-        messageCount++; // agent reply
+        messageCount++;
         updateMsgCount();
         appendAgentResult(data);
       }
-
     } catch (e) {
       clearInterval(labelInterval);
       removeThinking();
       appendErrorResult('Could not reach the server. Make sure the backend is running on port 8000.');
     }
-
     isLoading = false;
     document.getElementById('send-btn').disabled = false;
     input.focus();
   }
 
-  // ── Health check ──
-  async function checkHealth() {
-    try {
-      const r = await fetch(`${API_URL}/health`);
-      const statusEl = document.getElementById('status-text');
-      const dot = document.querySelector('.status-dot');
-      if (r.ok) {
-        statusEl.textContent = 'Connected to database';
-        dot.style.background = 'var(--success)';
-      } else {
-        statusEl.textContent = 'Backend offline';
-        dot.style.background = 'var(--error)';
-      }
-    } catch {
-      const statusEl = document.getElementById('status-text');
-      const dot = document.querySelector('.status-dot');
-      statusEl.textContent = 'Backend offline';
-      dot.style.background = 'var(--error)';
-    }
-  }
-
-  checkHealth();
-  setInterval(checkHealth, 15000);
-
+  // Focus input on load
   document.getElementById('question-input').focus();
 </script>
 </body>

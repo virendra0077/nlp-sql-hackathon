@@ -49,6 +49,17 @@ body{font-family:var(--font-b);background:var(--bg);color:var(--ink);display:fle
 .sdot.live{background:var(--green);animation:pulse 2.2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 
+/* ── Back button ─────────────────────────────────────────────────────────── */
+.back-btn{
+  display:flex;align-items:center;gap:6px;
+  background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);
+  padding:6px 12px;font-family:var(--font-b);font-size:12.5px;color:var(--ink3);
+  text-decoration:none;cursor:pointer;transition:all .18s;flex-shrink:0;
+}
+.back-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-lo)}
+.back-btn svg{width:13px;height:13px;flex-shrink:0;transition:transform .18s}
+.back-btn:hover svg{transform:translateX(-2px)}
+
 /* ── Shell ───────────────────────────────────────────────────────────────── */
 .shell{display:flex;flex:1;overflow:hidden}
 
@@ -268,7 +279,15 @@ td.td-badge{padding-left:15px}
 
 <!-- Topbar -->
 <div class="topbar">
-  <a href="#" class="logo"><div class="logo-pip"></div>RE Insight</a>
+  <a href="index.html" class="back-btn" title="Back to Dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="19" y1="12" x2="5" y2="12"/>
+      <polyline points="12 19 5 12 12 5"/>
+    </svg>
+    Back
+  </a>
+  <div class="tb-sep"></div>
+  <a href="index.html" class="logo"><div class="logo-pip"></div>RE Insight</a>
   <div class="tb-sep"></div>
   <span class="tb-title">Data Explorer</span>
   <div class="tb-right">
@@ -398,8 +417,8 @@ const ID_PAT     = /id$/i;
 ═══════════════════════════════════════════════════════════════ */
 let S = {
   table: null,
-  meta: {},        // full /tables response
-  opts: {},        // filter option values per column
+  meta: {},
+  opts: {},
   page: 1,
   sortCol: '',
   sortDir: 'asc',
@@ -467,7 +486,6 @@ async function selectTable(name) {
   document.getElementById('tb-' + name).classList.add('active');
   document.getElementById('sv-tblname').textContent = name;
 
-  /* Load filter options */
   try {
     const r = await fetch(`${API}/filter-options/${name}`);
     S.opts = await r.json();
@@ -504,7 +522,6 @@ function buildFilters(name) {
   document.getElementById('date-wrap').style.display = m.has_date ? 'flex' : 'none';
   document.getElementById('amt-wrap').style.display  = m.has_amount ? 'flex' : 'none';
 
-  /* Sum stat card */
   const sc = document.getElementById('sc-sum');
   if (m.sum_cols.length) {
     sc.style.display = 'flex';
@@ -636,7 +653,6 @@ function renderTable(data) {
 
   const cols = data.columns;
 
-  /* Header */
   const thead = `<thead><tr>${cols.map(c => {
     const sorted = S.sortCol === c;
     const arrow  = sorted ? (S.sortDir === 'asc' ? '↑' : '↓') : '↕';
@@ -644,8 +660,7 @@ function renderTable(data) {
       ${esc(c)}<span class="sa">${arrow}</span></th>`;
   }).join('')}</tr></thead>`;
 
-  /* Body */
-  const tbody = `<tbody>${data.rows.map((row, ri) => {
+  const tbody = `<tbody>${data.rows.map((row) => {
     const cells = row.map((val, ci) => cellHTML(cols[ci], val)).join('');
     return `<tr>${cells}</tr>`;
   }).join('')}</tbody>`;
@@ -655,23 +670,16 @@ function renderTable(data) {
 }
 
 function cellHTML(col, val) {
-  /* Empty */
   if (val === '' || val === null || val === undefined) {
     return `<td class="td-empty">—</td>`;
   }
-
-  /* ID columns */
   if (ID_PAT.test(col)) {
     return `<td class="td-id">#${esc(String(val))}</td>`;
   }
-
-  /* Date columns */
   if (DATE_COLS.has(col)) {
     const d = String(val).split('T')[0];
     return `<td class="td-date">${esc(d)}</td>`;
   }
-
-  /* Numeric / money columns */
   if (NUM_COLS.has(col)) {
     const n = typeof val === 'number' ? val : parseFloat(val);
     if (!isNaN(n)) {
@@ -684,8 +692,6 @@ function cellHTML(col, val) {
       return `<td class="td-num" title="${n.toLocaleString()}">${display}</td>`;
     }
   }
-
-  /* Badge columns */
   if (BADGE_COLS.has(col)) {
     const cls = col === 'ZoneName' ? 'badge-zone'
               : col === 'DevelopmentType' ? 'badge-dev'
@@ -693,8 +699,6 @@ function cellHTML(col, val) {
               : 'badge-sch';
     return `<td class="td-badge"><span class="badge ${cls}">${esc(String(val))}</span></td>`;
   }
-
-  /* Default */
   const s = String(val);
   return `<td title="${esc(s)}">${esc(s)}</td>`;
 }
@@ -716,7 +720,6 @@ function updateStats(data) {
              : v.toLocaleString('en-IN',{maximumFractionDigits:2});
     document.getElementById('sv-sum').textContent  = disp;
     document.getElementById('sc-sum').style.display = 'flex';
-    document.getElementById('tcount-' && `tc-${S.table}`);
   }
 
   const tc = document.getElementById(`tc-${S.table}`);
@@ -733,7 +736,6 @@ function renderPagination(data) {
   const to   = Math.min(cp*ps, data.total).toLocaleString();
   document.getElementById('pg-info').textContent = `Rows ${from} – ${to} of ${data.total.toLocaleString()}`;
 
-  /* Build page numbers: first, last, cp ±2 */
   const show = new Set([1, tp, cp, cp-1, cp-2, cp+1, cp+2].filter(p => p >= 1 && p <= tp));
   const sorted = [...show].sort((a,b) => a-b);
 
