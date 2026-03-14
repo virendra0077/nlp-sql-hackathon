@@ -10,6 +10,7 @@ from decimal import Decimal
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.shortcuts import render
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -310,3 +311,10 @@ def table_data(request, table: str):
         })
     except Exception as e:
         return JsonResponse({"error": f"{type(e).__name__}: {e}"}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def explorer_ui(request):
+    """Serve the Data Explorer HTML page."""
+    return render(request, "explorer.html", {"user": request.user})
