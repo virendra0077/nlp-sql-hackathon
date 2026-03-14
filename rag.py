@@ -6,7 +6,7 @@ Place at project root alongside manage.py.
 import os
 import numpy as np
 
-_TOP_K       = 8
+_TOP_K       = 12
 _MODEL_NAME  = "all-MiniLM-L6-v2"
 _SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "schema.txt")
 
@@ -125,16 +125,12 @@ WHERE rud.REAssetId IN (
 )
 AND rs.BookingDate IS NOT NULL;""",
 
-    """Canonical SQL for ranking assets by sales (least/most):
+"""Canonical SQL for ranking assets by sales (least/most):
 SELECT ra.AssetName,
        COALESCE(SUM(rus.Amount), 0) AS TotalSales
 FROM REAssets ra
 LEFT JOIN ReSales rs ON rs.REAssetId = ra.REAssetId
 LEFT JOIN REUnitSales rus ON rus.ReSalesID = rs.ReSalesID
-LEFT JOIN REPriceHeaders rph
-    ON rph.REAssetID = rs.REAssetId
-   AND rph.HeaderValue = rus.PriceHeader
-   AND rph.ValueType = 'Sale Value'
 GROUP BY ra.AssetName
 ORDER BY TotalSales ASC
 LIMIT 5;
@@ -146,13 +142,146 @@ FROM Regions rg
 JOIN REAssets ra ON ra.RegionsId = rg.RegionsId
 JOIN ReSales rs ON rs.REAssetId = ra.REAssetId
 JOIN REUnitSales rus ON rus.ReSalesID = rs.ReSalesID
-JOIN REPriceHeaders rph
-    ON rph.REAssetID = rs.REAssetId
-   AND rph.HeaderValue = rus.PriceHeader
-   AND rph.ValueType = 'Sale Value'
 GROUP BY rg.RegionsName
 ORDER BY Receivables DESC
-LIMIT 1;""",
+LIMIT 1;
+NOTE: No REPriceHeaders join for any ranking/zone/region query.""",
+
+"""Canonical SQL for region with highest sales or receivables:
+SELECT rg.RegionsName,
+       COALESCE(SUM(rus.Amount), 0) AS TotalSales,
+       COALESCE(SUM(rus.Amount) - SUM(rus.Collections::numeric), 0) AS Receivables
+FROM Regions rg
+JOIN REAssets ra ON ra.RegionsId = rg.RegionsId
+JOIN ReSales rs ON rs.REAssetId = ra.REAssetId
+JOIN REUnitSales rus ON rus.ReSalesID = rs.ReSalesID
+GROUP BY rg.RegionsName
+ORDER BY TotalSales DESC
+LIMIT 1;
+NOTE: Never join REPriceHeaders for region/zone aggregate queries.""",
+"""Canonical SQL for average unit price per configuration:
+SELECT rud.Configuration,
+       COALESCE(AVG(rus.Amount), 0) AS AvgUnitPrice,
+       COUNT(DISTINCT rs.RESalesID) AS UnitsSold
+FROM RESales rs
+INNER JOIN REUnitSales rus ON rus.ReSalesID = rs.RESalesID
+INNER JOIN REPriceHeaders rph
+    ON rph.REAssetID  = rs.REAssetId
+   AND rph.HeaderValue = rus.PriceHeader
+   AND rph.ValueType   = 'Sale Value'
+INNER JOIN REUnitDetails rud
+    ON rud.REAssetId  = rs.REAssetId
+   AND rud.UniqueKey  = rs.REUnitDetailId
+GROUP BY rud.Configuration
+ORDER BY AvgUnitPrice DESC;""",
+
+"""Canonical SQL for developer with highest total sales:
+SELECT ra.DeveloperName,
+       COALESCE(SUM(rus.Amount), 0) AS TotalSales
+FROM REAssets ra
+LEFT JOIN RESales rs ON rs.REAssetId = ra.REAssetId
+LEFT JOIN REUnitSales rus ON rus.ReSalesID = rs.RESalesID
+LEFT JOIN REPriceHeaders rph
+    ON rph.REAssetID   = rs.REAssetId
+   AND rph.HeaderValue = rus.PriceHeader
+   AND rph.ValueType   = 'Sale Value'
+GROUP BY ra.DeveloperName
+ORDER BY TotalSales DESC
+LIMIT 5;""",
+
+"""Canonical SQL for monthly sales trend:
+SELECT DATE_TRUNC('month', rs.BookingDate) AS SaleMonth,
+       COUNT(DISTINCT rs.RESalesID)         AS UnitsSold,
+       COALESCE(SUM(rus.Amount), 0)         AS TotalSales
+FROM RESales rs
+INNER JOIN REUnitSales rus ON rus.ReSalesID = rs.RESalesID
+INNER JOIN REPriceHeaders rph
+    ON rph.REAssetID   = rs.REAssetId
+   AND rph.HeaderValue = rus.PriceHeader
+   AND rph.ValueType   = 'Sale Value'
+WHERE rs.BookingDate IS NOT NULL
+GROUP BY DATE_TRUNC('month', rs.BookingDate)
+ORDER BY SaleMonth;""",
+
+"""Canonical SQL for asset with maximum units sold:
+SELECT ra.AssetName,
+       COUNT(DISTINCT rs.RESalesID) AS UnitsSold
+FROM REAssets ra
+LEFT JOIN ReSales rs ON rs.REAssetId = ra.REAssetId
+GROUP BY ra.AssetName
+ORDER BY UnitsSold DESC
+LIMIT 1;
+NOTE: Never filter BookingDate IS NOT NULL for unit count queries.""",
+
+"""Canonical SQL for revenue per region within each zone:
+SELECT zd.ZoneName,
+       rg.RegionsName,
+       COALESCE(SUM(rus.Amount), 0) AS TotalRevenue
+FROM ZoneDetails zd
+JOIN Regions rg      ON rg.ZoneID     = zd.ZoneID
+JOIN REAssets ra     ON ra.RegionsId  = rg.RegionsId
+JOIN ReSales rs      ON rs.REAssetId  = ra.REAssetId
+JOIN REUnitSales rus ON rus.ReSalesID = rs.RESalesID
+JOIN REPriceHeaders rph
+    ON rph.REAssetID   = rs.REAssetId
+   AND rph.HeaderValue = rus.PriceHeader
+   AND rph.ValueType   = 'Sale Value'
+GROUP BY zd.ZoneName, rg.RegionsName
+ORDER BY zd.ZoneName, TotalRevenue DESC;""",
+
+"""Canonical SQL for count of units sold by configuration (e.g. 2BHK):
+SELECT rud.Configuration,
+       COUNT(DISTINCT rs.RESalesID) AS UnitsSold
+FROM RESales rs
+INNER JOIN REUnitDetails rud
+    ON rud.REAssetId = rs.REAssetId
+   AND rud.UniqueKey = rs.REUnitDetailId
+WHERE rs.BookingDate IS NOT NULL
+GROUP BY rud.Configuration
+ORDER BY UnitsSold DESC;
+
+-- For a specific config e.g. '2BHK':
+SELECT COUNT(DISTINCT rs.RESalesID) AS UnitsSold
+FROM ReSales rs
+INNER JOIN REUnitDetails rud
+    ON rud.REAssetId = rs.REAssetId
+   AND rud.UniqueKey = rs.REUnitDetailId
+WHERE rs.BookingDate IS NOT NULL
+  AND rud.Configuration ILIKE '%2BHK%';""",
+"""Canonical SQL for sales velocity (fastest/slowest selling project):
+SELECT 
+    ra.AssetName,
+    COUNT(DISTINCT rs.ReSalesID) AS TotalUnitsSold,
+    ROUND(
+        COUNT(DISTINCT rs.ReSalesID)::numeric /
+        NULLIF(
+            EXTRACT(DAY FROM AGE(MAX(rs.BookingDate), MIN(rs.BookingDate)))
+            + EXTRACT(MONTH FROM AGE(MAX(rs.BookingDate), MIN(rs.BookingDate))) * 30
+            + EXTRACT(YEAR FROM AGE(MAX(rs.BookingDate), MIN(rs.BookingDate))) * 365
+        , 0) * 30
+    , 2) AS UnitsPerMonth,
+    MIN(rs.BookingDate) AS FirstSale,
+    MAX(rs.BookingDate) AS LastSale
+FROM REAssets ra
+JOIN ReSales rs ON rs.REAssetId = ra.REAssetId
+WHERE rs.BookingDate IS NOT NULL
+GROUP BY ra.AssetName
+HAVING COUNT(DISTINCT rs.ReSalesID) > 1
+ORDER BY UnitsPerMonth DESC
+LIMIT 1;
+Keywords: velocity, fastest selling, slowest selling, sales rate,
+units per month, sales speed, best performing, worst performing pace.
+NEVER use EXTRACT(EPOCH). NEVER use only months.
+Always use DAY + MONTH*30 + YEAR*365 formula.""",
+"""Key aggregation patterns summary:
+- Units sold        = COUNT(DISTINCT rs.RESalesID) — NO BookingDate filter
+- Total sales value = COALESCE(SUM(rus.Amount), 0) with REPriceHeaders 'Sale Value' join
+- Avg unit price    = AVG(rus.Amount) with REPriceHeaders 'Sale Value' join
+- Balance recv.     = SUM(rus.Amount) - SUM(rus.Collections::numeric)
+- Monthly trend     = DATE_TRUNC('month', rs.BookingDate) GROUP BY
+- Sales velocity    = COUNT(DISTINCT rs.ReSalesID) / NULLIF(days_formula, 0) * 30 where days = DAY + MONTH*30 + YEAR*365 from AGE()
+- Config filter     = JOIN REUnitDetails ON UniqueKey = REUnitDetailId, filter rud.Configuration ILIKE
+- Developer rank    = GROUP BY ra.DeveloperName with LEFT JOIN REAssets""",
 ]
 
 
