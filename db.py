@@ -1,18 +1,25 @@
-import psycopg2
-from psycopg2 import pool
+"""
+db.py — PostgreSQL connection pool shared across the Django process.
+Drop this at the project root (same level as manage.py).
+"""
+
 import os
 from contextlib import contextmanager
 
+import psycopg2
+from psycopg2 import pool
+from dotenv import load_dotenv
 
-# Configuration — prefer env vars over hard-coded values
+load_dotenv()
+
 DB_CONFIG = {
-    "host":     os.getenv("DB_HOST", "localhost"),
-    "database": os.getenv("DB_NAME", "test1"),
-    "user":     os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "Virendra@26"),   
+    "host":     os.getenv("DB_HOST",     "localhost"),
+    "database": os.getenv("DB_NAME",     "test1"),
+    "user":     os.getenv("DB_USER",     "postgres"),
+    "password": os.getenv("DB_PASSWORD", ""),
+    "port":     os.getenv("DB_PORT",     "5432"),
 }
 
-# A single connection pool shared across the process (min 1, max 5 connections)
 _pool: pool.SimpleConnectionPool | None = None
 
 
@@ -25,7 +32,6 @@ def _get_pool() -> pool.SimpleConnectionPool:
 
 @contextmanager
 def _get_conn():
-    """Yield a connection from the pool and return it when done."""
     p = _get_pool()
     conn = p.getconn()
     try:
@@ -39,10 +45,7 @@ def _get_conn():
 
 
 def run_query(sql: str) -> list[tuple]:
-    """
-    Execute *sql* and return all rows.
-    Raises psycopg2 exceptions on failure — caller handles retries.
-    """
+    """Execute SQL and return all rows."""
     with _get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql)
@@ -50,7 +53,6 @@ def run_query(sql: str) -> list[tuple]:
 
 
 def close_pool():
-    """Call at shutdown to release all DB connections."""
     global _pool
     if _pool and not _pool.closed:
         _pool.closeall()

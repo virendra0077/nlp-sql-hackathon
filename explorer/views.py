@@ -1,54 +1,38 @@
 """
-explorer.py  –  Dynamic table explorer API  (v2 — fixed)
-
-Add to app.py:
-    from explorer import router as explorer_router
-    app.include_router(explorer_router)
-
-Fixes vs v1:
-  - money cols cast to ::numeric so Python gets Decimal, not a garbled string
-  - sort_map resolves JOIN aliases (ZoneName, AssetName) to real SQL expressions
-  - where_map uses fully qualified column names in WHERE clauses
-  - _safe() serializer handles Decimal / date / bool / None → plain Python types
-  - error detail is always a plain string (no more [object Object] in browser)
+explorer/views.py — Table explorer views (ported from explorer_v2.py).
+All endpoints require login.
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+import os
+import datetime
 from decimal import Decimal
-import datetime, os, psycopg2
 
-router = APIRouter(prefix="/explorer", tags=["explorer"])
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
 
-# ── DB ────────────────────────────────────────────────────────────────────────
 
-def _connect():
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        database=os.getenv("DB_NAME", "test1"),
-        user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", ""),
-    )
-
+# ── DB helpers ────────────────────────────────────────────────────────────────
 
 def _safe(v):
-    """Convert any psycopg2 value to a JSON-safe Python type."""
-    if v is None:
-        return ""
-    if isinstance(v, Decimal):
-        return float(v)
-    if isinstance(v, datetime.datetime):
-        return v.strftime("%Y-%m-%d")
-    if isinstance(v, datetime.date):
-        return str(v)
-    if isinstance(v, bool):
-        return str(v)
+    if v is None:                        return ""
+    if isinstance(v, Decimal):           return float(v)
+    if isinstance(v, datetime.datetime): return v.strftime("%Y-%m-%d")
+    if isinstance(v, datetime.date):     return str(v)
+    if isinstance(v, bool):              return str(v)
     return v
 
 
 def _run(sql: str, params: list = None):
-    """Run SQL, return (col_names_list, rows_list). All values safe."""
-    conn = _connect()
+    """Open a fresh psycopg2 connection, run sql, return (cols, rows)."""
+    import psycopg2
+    conn = psycopg2.connect(
+        host=os.getenv("DB_HOST", "localhost"),
+        database=os.getenv("DB_NAME", "test1"),
+        user=os.getenv("DB_USER", "postgres"),
+        password=os.getenv("DB_PASSWORD", ""),
+        port=os.getenv("DB_PORT", "5432"),
+    )
     try:
         cur = conn.cursor()
         cur.execute(sql, params or [])
@@ -65,23 +49,9 @@ def _scalar(sql: str, params: list = None):
     return rows[0][0] if rows else 0
 
 
-# ── Table config ──────────────────────────────────────────────────────────────
-#
-# Keys per table:
-#   select       – column names on the primary table (may include casts like "Col::numeric AS Col")
-#   joins        – JOIN clause string
-#   extra_select – raw SQL appended after base SELECT (for joined cols, e.g. ", ra.AssetName")
-#   display_cols – final column names as returned by the query (drives UI headers + sort)
-#   sort_map     – {display_col: "qualified.SQL.expr"} for ORDER BY (needed for JOIN aliases)
-#   searchable   – list of qualified SQL expressions for ILIKE search
-#   filterable   – {display_col: "SELECT DISTINCT …"} to populate dropdown options
-#   where_map    – {display_col: "qualified.SQL.expr"} for WHERE = %s
-#   date_cols    – first entry used for date-range filter
-#   amount_cols  – first entry used for amount-range filter
-#   sum_cols     – columns to SUM in the stats bar
+# ── Table config (identical to explorer_v2.py) ────────────────────────────────
 
 TABLE_CONFIG = {
-
     "REAssets": {
         "select":       ["REAssetId", "AssetName", "DeveloperName",
                          "BorrowerName", "ZoneId", "RegionsId", "LocationId"],
@@ -99,7 +69,6 @@ TABLE_CONFIG = {
         "sum_cols":     [],
         "count_label":  "Assets",
     },
-
     "RESales": {
         "select":       ["RESalesID","REAssetId","CustomerName","BookingDate",
                          "RegistrationDate","Scheme","Financer"],
@@ -119,9 +88,7 @@ TABLE_CONFIG = {
         "sum_cols":     [],
         "count_label":  "Sales",
     },
-
     "REUnitSales": {
-        # Cast money cols to numeric so Python receives Decimal, not a '$' string
         "select":       ["REUnitSalesID", "RESalesID", "PriceHeader",
                          "Amount",
                          "Demand::numeric AS Demand",
@@ -141,7 +108,6 @@ TABLE_CONFIG = {
         "sum_cols":     ["Amount"],
         "count_label":  "Unit Sales",
     },
-
     "REUnitDetails": {
         "select":       ["REUnitDetailId","REAssetId","ProjectName","DevelopmentType",
                          "ProjectType","Wing","Floor","UnitNumber","Configuration",
@@ -168,7 +134,6 @@ TABLE_CONFIG = {
         "sum_cols":     [],
         "count_label":  "Units",
     },
-
     "REPriceHeaders": {
         "select":       ["REPriceHeaderId","REAssetID","ValueType","HeaderValue"],
         "joins":        "LEFT JOIN REAssets ra ON ra.REAssetId = REPriceHeaders.REAssetID",
@@ -185,7 +150,6 @@ TABLE_CONFIG = {
         "sum_cols":     [],
         "count_label":  "Price Headers",
     },
-
     "ZoneDetails": {
         "select":       ["ZoneID","ZoneName"],
         "joins":        "",
@@ -205,41 +169,37 @@ TABLE_CONFIG = {
 
 def _build_where(cfg, active_filters, search, date_from, date_to, amt_min, amt_max):
     clauses, params = [], []
-
     for col, val in active_filters.items():
         expr = cfg.get("where_map", {}).get(col, col)
         clauses.append(f"{expr} = %s")
         params.append(val)
-
     if search:
         parts = [f"CAST({c} AS TEXT) ILIKE %s" for c in cfg.get("searchable", [])]
         if parts:
             clauses.append("(" + " OR ".join(parts) + ")")
             params.extend([f"%{search}%"] * len(parts))
-
     if date_from and cfg.get("date_cols"):
         clauses.append(f"{cfg['date_cols'][0]} >= %s")
         params.append(date_from)
     if date_to and cfg.get("date_cols"):
         clauses.append(f"{cfg['date_cols'][0]} <= %s")
         params.append(date_to)
-
     if amt_min is not None and cfg.get("amount_cols"):
         clauses.append(f"{cfg['amount_cols'][0]} >= %s")
         params.append(amt_min)
     if amt_max is not None and cfg.get("amount_cols"):
         clauses.append(f"{cfg['amount_cols'][0]} <= %s")
         params.append(amt_max)
-
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     return where, params
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Views ─────────────────────────────────────────────────────────────────────
 
-@router.get("/tables")
-def list_tables():
-    return {
+@login_required
+@require_http_methods(["GET"])
+def list_tables(request):
+    data = {
         name: {
             "display_cols": cfg["display_cols"],
             "filterable":   list(cfg.get("filterable", {}).keys()),
@@ -250,12 +210,14 @@ def list_tables():
         }
         for name, cfg in TABLE_CONFIG.items()
     }
+    return JsonResponse(data)
 
 
-@router.get("/filter-options/{table}")
-def get_filter_options(table: str):
+@login_required
+@require_http_methods(["GET"])
+def filter_options(request, table: str):
     if table not in TABLE_CONFIG:
-        raise HTTPException(404, f"Table '{table}' not found")
+        return JsonResponse({"error": f"Table '{table}' not found"}, status=404)
     options = {}
     for col, sql in TABLE_CONFIG[table].get("filterable", {}).items():
         try:
@@ -263,58 +225,46 @@ def get_filter_options(table: str):
             options[col] = [str(r[0]) for r in rows if r[0] != ""]
         except Exception:
             options[col] = []
-    return options
+    return JsonResponse(options)
 
 
-@router.get("/data/{table}")
-def get_table_data(
-    table:        str,
-    page:         int             = Query(1, ge=1),
-    page_size:    int             = Query(25, ge=1, le=200),
-    sort_col:     str             = Query(""),
-    sort_dir:     str             = Query("asc"),
-    search:       str             = Query(""),
-    date_from:    str             = Query(""),
-    date_to:      str             = Query(""),
-    amount_min:   Optional[str] = Query(None),
-    amount_max:   Optional[str] = Query(None),
-    filter_ZoneName:                  str = Query(""),
-    filter_AssetName:                 str = Query(""),
-    filter_Scheme:                    str = Query(""),
-    filter_PriceHeader:               str = Query(""),
-    filter_ValueType:                 str = Query(""),
-    filter_DevelopmentType:           str = Query(""),
-    filter_AreaConsideredMeasurement: str = Query(""),
-):
+@login_required
+@require_http_methods(["GET"])
+def table_data(request, table: str):
     if table not in TABLE_CONFIG:
-        raise HTTPException(404, f"Table '{table}' not found")
+        return JsonResponse({"error": f"Table '{table}' not found"}, status=404)
 
-    cfg = TABLE_CONFIG[table]
+    cfg       = TABLE_CONFIG[table]
+    get       = request.GET
 
-    # Safely parse amount strings — empty string or None both become None
+    page      = max(1, int(get.get("page", 1)))
+    page_size = min(200, max(1, int(get.get("page_size", 25))))
+    sort_col  = get.get("sort_col", "")
+    sort_dir  = get.get("sort_dir", "asc")
+    search    = get.get("search", "")
+    date_from = get.get("date_from", "")
+    date_to   = get.get("date_to", "")
+
     def _to_float(s):
         try: return float(s) if s else None
         except (TypeError, ValueError): return None
 
-    amt_min = _to_float(amount_min)
-    amt_max = _to_float(amount_max)
+    amt_min = _to_float(get.get("amount_min"))
+    amt_max = _to_float(get.get("amount_max"))
 
     raw_filters = {
-        "ZoneName":               filter_ZoneName,
-        "AssetName":              filter_AssetName,
-        "Scheme":                 filter_Scheme,
-        "PriceHeader":            filter_PriceHeader,
-        "ValueType":              filter_ValueType,
-        "DevelopmentType":        filter_DevelopmentType,
-        "AreaConsideredMeasurement": filter_AreaConsideredMeasurement,
+        "ZoneName":                  get.get("filter_ZoneName", ""),
+        "AssetName":                 get.get("filter_AssetName", ""),
+        "Scheme":                    get.get("filter_Scheme", ""),
+        "PriceHeader":               get.get("filter_PriceHeader", ""),
+        "ValueType":                 get.get("filter_ValueType", ""),
+        "DevelopmentType":           get.get("filter_DevelopmentType", ""),
+        "AreaConsideredMeasurement": get.get("filter_AreaConsideredMeasurement", ""),
     }
-    active = {k: v for k, v in raw_filters.items()
-              if v and k in cfg.get("filterable", {})}
+    active = {k: v for k, v in raw_filters.items() if v and k in cfg.get("filterable", {})}
 
-    where, params = _build_where(cfg, active, search, date_from, date_to,
-                                  amt_min, amt_max)
+    where, params = _build_where(cfg, active, search, date_from, date_to, amt_min, amt_max)
 
-    # Build SELECT list — entries with "::" or "AS" are raw SQL, others get table prefix
     def _sel(c):
         return c if ("::" in c or " AS " in c or "." in c) else f"{table}.{c}"
 
@@ -323,7 +273,6 @@ def get_table_data(
     joins  = cfg.get("joins", "")
     offset = (page - 1) * page_size
 
-    # Sort — resolve alias through sort_map, then fall back to bare column name
     order = ""
     if sort_col and sort_col in cfg["display_cols"]:
         sort_expr = cfg.get("sort_map", {}).get(sort_col, sort_col)
@@ -341,7 +290,6 @@ def get_table_data(
     try:
         total      = int(_scalar(count_sql, params))
         cols, rows = _run(data_sql, params)
-
         stats = {}
         for sc in cfg.get("sum_cols", []):
             try:
@@ -350,7 +298,7 @@ def get_table_data(
             except Exception:
                 stats[sc] = 0
 
-        return {
+        return JsonResponse({
             "columns":     cols,
             "rows":        rows,
             "total":       total,
@@ -359,8 +307,6 @@ def get_table_data(
             "total_pages": max(1, -(-total // page_size)),
             "stats":       stats,
             "count_label": cfg["count_label"],
-        }
-
+        })
     except Exception as e:
-        # Always return a plain string — never let psycopg2/Python objects leak to browser
-        raise HTTPException(500, detail=f"{type(e).__name__}: {e}")
+        return JsonResponse({"error": f"{type(e).__name__}: {e}"}, status=500)

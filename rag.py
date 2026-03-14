@@ -1,52 +1,35 @@
 """
-rag.py  –  Schema retrieval via FAISS vector search.
-
-Key improvements over v1:
-  - Schema chunks are written as natural-language Q&A pairs so the embedding
-    model can match question intent, not just keyword overlap.
-  - The index is built ONCE at import time.
-  - Falls back to returning ALL chunks if FAISS is unavailable (keeps the
-    agent working even without faiss-cpu installed).
+rag.py — Schema retrieval via FAISS vector search.
+Place at project root alongside manage.py.
 """
 
 import os
 import numpy as np
 
-_TOP_K       = 8          # retrieve more chunks — LLM context window is cheap
+_TOP_K       = 8
 _MODEL_NAME  = "all-MiniLM-L6-v2"
-_SCHEMA_FILE = "schema.txt"
+_SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "schema.txt")
 
 _model     = None
 _index     = None
 _documents: list[str] = []
 
-
-# ── Rich hand-crafted schema chunks ──────────────────────────────────────────
-#
-# Each chunk is a short paragraph that tells the embedding model BOTH
-# what table/columns exist AND what kind of questions they answer.
-# This dramatically outperforms splitting the raw CREATE TABLE text.
-
 _HARDCODED_CHUNKS = [
-    # ── ZoneDetails ──────────────────────────────────────────────────────────
     """Table: ZoneDetails — stores geographic zones (North, East, West, South).
 Columns: ZoneID (PK int), ZoneName (varchar).
 Use for: "which zone is X in?", "assets in North", "zone performance".
 JOIN:    REAssets.ZoneId = ZoneDetails.ZoneID""",
 
-    # ── Regions ──────────────────────────────────────────────────────────────
     """Table: Regions — sub-divisions within zones.
 Columns: RegionsId (PK int), ZoneID (FK), RegionsName (varchar).
 Use for: "which region has the highest receivables?", "region-wise sales".
 JOIN:    REAssets.RegionsId = Regions.RegionsId""",
 
-    # ── Locations ────────────────────────────────────────────────────────────
     """Table: Locations — further subdivision within regions.
 Columns: LocationId (PK int), ZoneID, RegionsId, LocationName (varchar).
 Use for: "assets in a specific location".
 JOIN:    REAssets.LocationId = Locations.LocationId""",
 
-    # ── REAssets ─────────────────────────────────────────────────────────────
     """Table: REAssets — master table of real estate assets / projects.
 Columns: REAssetId (PK int), AssetName (varchar), DeveloperName, BorrowerName,
          ZoneId (FK→ZoneDetails.ZoneID), RegionsId (FK→Regions.RegionsId),
@@ -54,7 +37,6 @@ Columns: REAssetId (PK int), AssetName (varchar), DeveloperName, BorrowerName,
 Use for: "find asset by name", "assets in a zone/region", "developer info".
 Text matching: always use ILIKE '%name%' — never exact match.""",
 
-    # ── REUnitDetails ────────────────────────────────────────────────────────
     """Table: REUnitDetails — individual units / apartments within an asset.
 Columns: REUnitDetailId (PK int), REAssetId (FK), ProjectName, DevelopmentType
          (e.g. 'Residential', 'Commercial'), ProjectType, Wing, Floor,
@@ -69,7 +51,6 @@ Area to Sq Ft:
     WHEN 'Sq yards' THEN 9.0       * rud.AreaConsidered
   END""",
 
-    # ── REPriceHeaders ───────────────────────────────────────────────────────
     """Table: REPriceHeaders — maps price-header labels to ValueTypes per asset.
 Columns: REPriceHeaderId (PK int), REAssetID (FK→REAssets.REAssetId),
          ValueType (varchar, e.g. 'Sale Value'), HeaderValue (varchar).
@@ -82,7 +63,6 @@ Critical JOIN (for sales value queries):
 WARNING: some assets may NOT have a 'Sale Value' row — if diagnostics show
 this, DROP the REPriceHeaders join and sum directly from REUnitSales.""",
 
-    # ── ReSales ──────────────────────────────────────────────────────────────
     """Table: ReSales — one row per sale transaction.
 Columns: ReSalesID (PK int), REAssetId (FK), REUnitDetailId (varchar FK→UniqueKey),
          CustomerName, BookingDate (date), RegistrationDate (date),
@@ -91,7 +71,6 @@ Use for: "how many units sold", "booking date filter", "customer info".
 Unit count: COUNT(DISTINCT rs.ReSalesID) WHERE BookingDate IS NOT NULL
 Do NOT filter BookingDate IS NOT NULL for sales-value or receivables queries.""",
 
-    # ── REUnitSales ──────────────────────────────────────────────────────────
     """Table: REUnitSales — financial breakdown of each sale.
 Columns: REUnitSalesID (PK int), ReSalesID (FK→ReSales.ReSalesID),
          PriceHeader (varchar), Amount (float), Demand (money), Collections (money).
@@ -104,7 +83,6 @@ Formulas:
   Total Sales        = COALESCE(SUM(rus.Amount), 0)
   Balance Receivable = COALESCE(SUM(rus.Amount) - SUM(rus.Collections::numeric), 0)""",
 
-    # ── Canonical sales query ─────────────────────────────────────────────────
     """Canonical SQL for total sales of a named asset:
 SELECT COALESCE(SUM(rus.Amount), 0) AS TotalSales
 FROM ReSales rs
@@ -117,7 +95,6 @@ WHERE rs.REAssetId IN (
     SELECT REAssetId FROM REAssets WHERE AssetName ILIKE '%AssetName%'
 );""",
 
-    # ── Canonical receivables query ───────────────────────────────────────────
     """Canonical SQL for balance receivables of a named asset:
 SELECT COALESCE(SUM(rus.Amount) - SUM(rus.Collections::numeric), 0) AS BalanceReceivable
 FROM ReSales rs
@@ -130,7 +107,6 @@ WHERE rs.REAssetId IN (
     SELECT REAssetId FROM REAssets WHERE AssetName ILIKE '%AssetName%'
 );""",
 
-    # ── Canonical area query ──────────────────────────────────────────────────
     """Canonical SQL for area sold in Sq Ft for a named asset:
 SELECT COALESCE(SUM(
     CASE rud.AreaConsideredMeasurement
@@ -149,7 +125,6 @@ WHERE rud.REAssetId IN (
 )
 AND rs.BookingDate IS NOT NULL;""",
 
-    # ── Ranking / comparative queries ─────────────────────────────────────────
     """Canonical SQL for ranking assets by sales (least/most):
 SELECT ra.AssetName,
        COALESCE(SUM(rus.Amount), 0) AS TotalSales
@@ -161,7 +136,7 @@ LEFT JOIN REPriceHeaders rph
    AND rph.HeaderValue = rus.PriceHeader
    AND rph.ValueType = 'Sale Value'
 GROUP BY ra.AssetName
-ORDER BY TotalSales ASC  -- change to DESC for highest
+ORDER BY TotalSales ASC
 LIMIT 5;
 
 Canonical SQL for region with highest receivables:
@@ -183,15 +158,12 @@ LIMIT 1;""",
 
 def _build_index():
     global _model, _index, _documents
-
-    # ── Load schema.txt if it exists and split it into paragraphs ────────────
     file_chunks: list[str] = []
     if os.path.exists(_SCHEMA_FILE):
         with open(_SCHEMA_FILE) as f:
             raw = f.read()
         file_chunks = [d.strip() for d in raw.split("\n\n") if d.strip()]
 
-    # Combine hand-crafted chunks (higher signal) first, then file chunks
     _documents = _HARDCODED_CHUNKS + file_chunks
 
     try:
@@ -205,19 +177,15 @@ def _build_index():
         _index.add(np.array(embeddings, dtype="float32"))
         print(f"[RAG] FAISS index built with {len(_documents)} chunks.")
     except ImportError:
-        print("[RAG] faiss or sentence_transformers not installed — will return all chunks.")
+        print("[RAG] faiss or sentence_transformers not installed — returning all chunks.")
 
 
-# Build at import time
 _build_index()
 
 
 def retrieve_schema(question: str, top_k: int = _TOP_K) -> str:
-    """Return the most relevant schema chunks for *question*."""
     if _index is None or _model is None:
-        # Fallback: return all chunks (no FAISS)
         return "\n\n".join(_documents)
-
     q_emb = _model.encode([question])
     _, indices = _index.search(np.array(q_emb, dtype="float32"), top_k)
     selected = [_documents[i] for i in indices[0] if i < len(_documents)]
