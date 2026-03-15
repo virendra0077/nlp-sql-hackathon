@@ -376,10 +376,6 @@ kbd {
       <button class="sample-btn" onclick="fillQ(this)"><span class="sample-icon">₹</span>What are the balance receivables in Prabadevi Address?</button>
       <button class="sample-btn" onclick="fillQ(this)"><span class="sample-icon">📍</span>Which assets are located in the North?</button>
       <button class="sample-btn" onclick="fillQ(this)"><span class="sample-icon">📐</span>What is the area sold in Goa Villas?</button>
-      <button class="sample-btn" onclick="fillQ(this)"><span class="sample-icon">📊</span>Which asset has the least sales?</button>
-      <button class="sample-btn" onclick="fillQ(this)"><span class="sample-icon">🏆</span>Which region has the highest receivables?</button>
-      <button class="sample-btn" onclick="fillQ(this)"><span class="sample-icon">🏠</span>How many 2 BHK units sold?</button>
-      <button class="sample-btn" onclick="fillQ(this)"><span class="sample-icon">📅</span>Show monthly sales trend</button>
     </div>
 
     <div class="sb-footer">
@@ -761,6 +757,65 @@ async function ping(){
 ping(); setInterval(ping,15000);
 document.getElementById('q-input').focus();
 updateCount();
+function addResult(data) {
+  const ca = document.getElementById('chat-area');
+  const d  = document.createElement('div');
+  d.className = 'message-row';
+
+  const isMulti   = data.result.length > 1;
+  const isCasual  = data.sql === '-- casual question, no SQL needed --';
+  const isNum     = /^[₹\d\s,.CrL]+$/.test(data.formatted_result.trim());
+
+  let body = '';
+
+  if (isCasual) {
+    // Render as formatted text with line breaks
+    const html = esc(data.formatted_result)
+      .replace(/\n/g, '<br>')
+      .replace(/•/g, '<span style="color:var(--gold)">•</span>');
+    body = `<div class="result-text">${html}</div>`;
+  } else if (isMulti) {
+    const rows = data.formatted_result.split('\n').map(r => {
+      const cols = r.split(' | ');
+      return `<tr>${cols.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`;
+    }).join('');
+    body = `<table class="result-table">${rows}</table>`;
+  } else {
+    body = `<div class="${isNum ? 'result-value' : 'result-text'}">${esc(data.formatted_result)}</div>`;
+  }
+
+  const sid = 'sql-' + Date.now();
+  const sqlSection = isCasual ? '' : `
+    <button class="sql-toggle" onclick="toggleSQL('${sid}',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+      View generated SQL
+    </button>
+    <div class="sql-block" id="${sid}"><pre>${hlSQL(data.sql)}</pre></div>`;
+
+  d.innerHTML = `
+    <div class="msg-header">
+      <div class="avatar agent">AI</div>
+      <span class="msg-sender">RE Insight</span>
+      <span class="msg-time">
+        ${now()}
+        <span class="duration-badge">⚡ ${data.duration_ms}ms</span>
+      </span>
+    </div>
+    <div class="result-wrap">
+      <div class="result-card">
+        <div class="result-header">
+          <span class="result-lbl">${isCasual ? 'About' : 'Result'}</span>
+        </div>
+        <div class="result-body">${body}</div>
+      </div>
+      ${sqlSection}
+    </div>`;
+
+  ca.appendChild(d);
+  scrollBot();
+}
 </script>
 </body>
 </html>

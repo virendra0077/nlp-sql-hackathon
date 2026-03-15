@@ -46,7 +46,14 @@ def _json_body(request) -> dict:
 def format_result(result: list) -> str:
     if not result:
         return "No data found."
-
+        # Casual conversation response — already a formatted string
+    if (
+        len(result) == 1
+        and len(result[0]) == 1
+        and isinstance(result[0][0], str)
+        and '•' in result[0][0]
+    ):
+        return result[0][0]
     if len(result) == 1 and len(result[0]) == 1:
         val = result[0][0]
         if val is None:

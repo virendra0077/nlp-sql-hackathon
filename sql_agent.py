@@ -55,6 +55,59 @@ _key_index: int = 0
 print(f"[sql_agent] Loaded {len(GROQ_KEYS)} Groq API key(s). Model: {GROQ_MODEL}")
 
 
+
+import re
+
+# ── Casual conversation detector ─────────────────────────────────────────────
+
+_CASUAL_PATTERNS = [
+    r'^\s*(hi|hello|hey|hii|helo|howdy)\b',
+    r'\bhow are you\b',
+    r'\bwhat (are|do) you do\b',
+    r'\bwho are you\b',
+    r'\bwhat is your name\b',
+    r'\bwhat can you do\b',
+    r'\bhelp me\b',
+    r'\bhow (can|do) (you|i)\b',
+    r'\bthank(s| you)\b',
+    r'\bbye\b|\bgoodbye\b',
+    r'\bgood (morning|afternoon|evening|night)\b',
+    r'\bnice to meet\b',
+    r'\bhow (does|do) (this|it) work\b',
+    r'\bwhat is re insight\b',
+    r'\bassist\b.*\bme\b',
+]
+
+_CASUAL_RESPONSE = (
+    "Hello! I'm RE Insight — your real estate portfolio assistant. "
+    "I can answer questions about your data such as:\n"
+    "• Sales value for any asset (e.g. 'What are the sales in Prabadevi Address?')\n"
+    "• Balance receivables (e.g. 'What are the receivables in Prabadevi Address?')\n"
+    "• Zone / region queries (e.g. 'Which assets are in the North?')\n"
+    "• Area sold (e.g. 'What is the area sold in Goa Villas?')\n"
+    "• Unit counts, configurations, developer rankings, and more.\n\n"
+    "Try asking one of the sample questions on the left!"
+)
+
+
+def _is_casual(question: str) -> bool:
+    """Return True if the question is small talk, not a data query."""
+    q = question.lower().strip()
+    # Very short non-numeric input is likely casual
+    if len(q.split()) <= 3 and not any(
+        kw in q for kw in ['sale', 'area', 'asset', 'zone', 'unit',
+                            'receivable', 'balance', 'north', 'south',
+                            'east', 'west', 'bhk', 'region', 'developer']
+    ):
+        for pat in _CASUAL_PATTERNS:
+            if re.search(pat, q, re.IGNORECASE):
+                return True
+    # Longer casual phrases
+    for pat in _CASUAL_PATTERNS:
+        if re.search(pat, q, re.IGNORECASE):
+            return True
+    return False
+
 # ── System prompt ─────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are an expert PostgreSQL SQL generator for a real-estate portfolio database.
@@ -119,19 +172,21 @@ RULE 5 — CANONICAL JOIN PATTERN for sales / receivables
 ═══════════════════════════════════════════════════════════
 RULE 6 — AREA QUERIES
 ═══════════════════════════════════════════════════════════
-Join REUnitDetails to RESales via:
+Join REUnitDetails to ReSales via:
   rs.REUnitDetailId = rud.UniqueKey   (both varchar)
+
+MANDATORY: Always add rs.BookingDate IS NOT NULL for area queries.
+Without this filter the result includes unbooked units and will be WRONG.
 
 Area conversion to Sq Ft — EXACT measurement strings from DB:
   COALESCE(SUM(
     CASE rud.AreaConsideredMeasurement
-      WHEN 'Sq Ft'   THEN 1.0     * rud.AreaConsidered
-      WHEN 'Sq mtr'  THEN 10.7639 * rud.AreaConsidered
-      WHEN 'Sq yard' THEN 9.0     * rud.AreaConsidered
+      WHEN 'Sq Ft'    THEN 1.0     * rud.AreaConsidered
+      WHEN 'Sq mtr'   THEN 10.7639 * rud.AreaConsidered
+      WHEN 'Sq yards' THEN 9.0     * rud.AreaConsidered
       ELSE rud.AreaConsidered
     END
   ), 0)
-NOTE: value is 'Sq yard' NOT 'Sq yards'.
 
 ═══════════════════════════════════════════════════════════
 RULE 7 — ZONE / REGION / LOCATION JOINS
@@ -448,6 +503,11 @@ def _diagnose_null_result(question: str, sql: str) -> str:
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def execute_with_retry(question: str) -> tuple[str, list]:
+    # ── Casual conversation guard ──────────────────────────────────────────
+    if _is_casual(question):
+        return "-- casual question, no SQL needed --", [[_CASUAL_RESPONSE]]
+    # ──────────────────────────────────────────────────────────────────────
+
     schema_context = retrieve_schema(question)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

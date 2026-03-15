@@ -83,17 +83,26 @@ Formulas:
   Total Sales        = COALESCE(SUM(rus.Amount), 0)
   Balance Receivable = COALESCE(SUM(rus.Amount) - SUM(rus.Collections::numeric), 0)""",
 
-    """Canonical SQL for total sales of a named asset:
-SELECT COALESCE(SUM(rus.Amount), 0) AS TotalSales
-FROM ReSales rs
-INNER JOIN REUnitSales rus ON rus.ReSalesID = rs.ReSalesID
-INNER JOIN REPriceHeaders rph
-    ON rph.REAssetID = rs.REAssetId
-   AND rph.HeaderValue = rus.PriceHeader
-   AND rph.ValueType = 'Sale Value'
-WHERE rs.REAssetId IN (
+"""Canonical SQL for area sold in Sq Ft for a named asset:
+SELECT COALESCE(SUM(
+    CASE rud.AreaConsideredMeasurement
+        WHEN 'Sq Ft'    THEN 1.0       * rud.AreaConsidered
+        WHEN 'Sq mtr'   THEN 10.7639   * rud.AreaConsidered
+        WHEN 'Sq yards' THEN 9.0       * rud.AreaConsidered
+        ELSE rud.AreaConsidered
+    END
+), 0) AS AreaSoldSqFt
+FROM REUnitDetails rud
+INNER JOIN ReSales rs
+    ON rs.REAssetId    = rud.REAssetId
+   AND rs.REUnitDetailId = rud.UniqueKey
+WHERE rud.REAssetId IN (
     SELECT REAssetId FROM REAssets WHERE AssetName ILIKE '%AssetName%'
-);""",
+)
+AND rs.BookingDate IS NOT NULL;
+
+CRITICAL: rs.BookingDate IS NOT NULL is MANDATORY for all area queries.
+Omitting it returns all units including unbooked ones — result will be wrong.""",
 
     """Canonical SQL for balance receivables of a named asset:
 SELECT COALESCE(SUM(rus.Amount) - SUM(rus.Collections::numeric), 0) AS BalanceReceivable
@@ -305,14 +314,8 @@ def _build_index():
         _index = faiss.IndexFlatL2(dim)
         _index.add(np.array(embeddings, dtype="float32"))
         print(f"[RAG] FAISS index built with {len(_documents)} chunks.")
-
-    except ImportError as e:
-        # FAISS not available — fall back to returning all chunks
-        # retrieve_schema() will return everything when _index is None
-        print(f"[RAG] FAISS not available ({e}) — using full chunk fallback.")
-
-    except Exception as e:
-        print(f"[RAG] Index build failed ({e}) — using full chunk fallback.")
+    except ImportError:
+        print("[RAG] faiss or sentence_transformers not installed — returning all chunks.")
 
 
 _build_index()
