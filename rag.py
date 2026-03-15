@@ -305,8 +305,14 @@ def _build_index():
         _index = faiss.IndexFlatL2(dim)
         _index.add(np.array(embeddings, dtype="float32"))
         print(f"[RAG] FAISS index built with {len(_documents)} chunks.")
-    except ImportError:
-        print("[RAG] faiss or sentence_transformers not installed — returning all chunks.")
+
+    except ImportError as e:
+        # FAISS not available — fall back to returning all chunks
+        # retrieve_schema() will return everything when _index is None
+        print(f"[RAG] FAISS not available ({e}) — using full chunk fallback.")
+
+    except Exception as e:
+        print(f"[RAG] Index build failed ({e}) — using full chunk fallback.")
 
 
 _build_index()
