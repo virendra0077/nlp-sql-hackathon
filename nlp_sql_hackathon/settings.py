@@ -13,9 +13,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me-in-production-use-a-long-random-string")
 
-DEBUG = os.getenv("DEBUG", "True") == "True"
+DEBUG = os.getenv("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
 
 # ── Installed Apps ────────────────────────────────────────────────────────────
 INSTALLED_APPS = [
@@ -34,6 +34,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -65,16 +66,21 @@ WSGI_APPLICATION = "nlp_sql_hackathon.wsgi.application"
 
 # ── Database — RE Insight uses its own psycopg2 connection pool ───────────────
 # Django ORM uses a separate DB for auth/sessions (can be the same PG or SQLite)
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "HOST":     os.getenv("DB_HOST", "localhost"),
-        "NAME":     os.getenv("DB_NAME", "test1"),
-        "USER":     os.getenv("DB_USER", "postgres"),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "PORT":     os.getenv("DB_PORT", "5432"),
+import dj_database_url
+DATABASE_URL = os.getenv('DATABASE_URL')
+if DATABASE_URL:
+    DATABASES = {'default': dj_database_url.parse(DATABASE_URL)}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'HOST':     os.getenv('DB_HOST', 'localhost'),
+            'NAME':     os.getenv('DB_NAME', 'test1'),
+            'USER':     os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'PORT':     os.getenv('DB_PORT', '5432'),
+        }
     }
-}
 
 # ── Password hashing — Django uses PBKDF2 by default; add bcrypt as option ───
 PASSWORD_HASHERS = [
@@ -111,6 +117,8 @@ CORS_ALLOW_CREDENTIALS = True
 STATIC_URL  = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
